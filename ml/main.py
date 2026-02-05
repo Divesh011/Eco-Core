@@ -114,10 +114,10 @@ def calculate_pump_schedule():
     decision = {
         "date": current_time.strftime("%Y-%m-%d"),
         "timestamp": current_time,
-        "total_water_pumped": f"{total_water_needed} L", # [NEW]
+        "total_water_pumped": f"{total_water_needed} L",
         "scheduled_time": scheduled_time,
         "duration": f"{round(duration_hours, 1)} Hours",
-        "total_cost": f"₹{round(actual_cost, 2)}",       # [NEW] Actual Cost
+        "total_cost": f"₹{round(actual_cost, 2)}",
         "money_saved": f"₹{round(savings, 2)}",
         "grid_status": "Off-Peak (Optimized)"
     }
