@@ -3,8 +3,17 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 from ml.analytics import EcoBrain
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="EcoCore OS", version="1.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
+
 brain = EcoBrain()
 
 # --- DATABASES ---
