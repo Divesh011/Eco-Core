@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
@@ -6,6 +8,8 @@ from ml.analytics import EcoBrain
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="EcoCore OS", version="1.0")
+brain = EcoBrain()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allows all origins
@@ -14,7 +18,8 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-brain = EcoBrain()
+app.mount("/static", StaticFiles(directory="website/static"), name="static")
+templates = Jinja2Templates(directory="website/templates")
 
 # --- DATABASES ---
 alerts_log = []  # Stores Alert History
@@ -46,6 +51,10 @@ def calculate_confidence(value, threshold):
     return round(confidence * 100, 2)
 
 # --- CORE ROUTES ---
+@app.get("/dashboard")
+def dashboard(request: Request):
+    """Serves the main website dashboard."""
+    return templates.TemplateResponse("dashboard.html", {"request": request})
 @app.post("/sensor/ingest")
 def ingest_sensor_data(data: SensorReading):
     """ Detects Leaks/Waste and triggers Auto-Cutoff. """
@@ -55,12 +64,17 @@ def ingest_sensor_data(data: SensorReading):
     # 1. LEAK DETECTION
     if data.occupancy == 0 and data.water_flow > 2.0:
         prob = calculate_confidence(data.water_flow, 2.0)
+        wasted_liters = data.water_flow * 60
+        # Cost: Liters/1000 * 0.5kWh/m3 * Peak Rate (10.20)
+        est_cost = (wasted_liters / 1000) * 0.5 * 10.20
 
         alert = {
             "id": len(alerts_log) + 1,
             "time": data.timestamp,
             "type": "CRITICAL_LEAK",
             "message": f"Leak Detected! Flow: {data.water_flow}L/m.",
+            "probable_wastage": f"{int(wasted_liters)} Liters",
+            "estimated_savings": f"₹{round(est_cost, 2)}",
             "probability_score": f"{prob}%",
             "action": "AUTO_CUTOFF (Solenoid Valve)",
             "status": "RESOLVED"
@@ -70,12 +84,16 @@ def ingest_sensor_data(data: SensorReading):
     # 2. ENERGY WASTE DETECTION
     elif data.occupancy == 0 and data.energy_load > 0.5:
         prob = calculate_confidence(data.energy_load, 0.5)
+        wasted_kwh = data.energy_load * 1.0
+        est_cost = wasted_kwh * 10.20  # Peak Rate
 
         alert = {
             "id": len(alerts_log) + 1,
             "time": data.timestamp,
             "type": "ENERGY_WASTE",
             "message": f"Energy Waste! Load: {data.energy_load} kW.",
+            "probable_wastage": f"{round(wasted_kwh, 2)} kWh",
+            "estimated_savings": f"₹{round(est_cost, 2)}",
             "probability_score": f"{prob}%",
             "action": "AUTO_CUTOFF (Smart Relay)",
             "status": "RESOLVED"
