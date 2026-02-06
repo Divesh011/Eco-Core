@@ -126,56 +126,79 @@ def dashboard(request: Request):
 def ingest_sensor_data(data: SensorReading):
     """ Detects Leaks/Waste and triggers Auto-Cutoff. """
     if not data.timestamp: data.timestamp = datetime.now()
+    current_hour = data.timestamp.hour
+
+    # WATER THRESHOLD (AI Predicted)
+    predicted_water_normal = brain.predict_demand(current_hour, data.occupancy, data.light_lux)
+    water_threshold = (predicted_water_normal * 1.5) + 1.0  # Safety buffer
+
+    # ENERGY THRESHOLD (Context Calculated)
+    expected_energy_load = (data.occupancy * 0.2) + 0.2
+    energy_threshold = expected_energy_load * 1.2  # 20% Buffer for spikes
+
     alert = None
 
-    # 1. LEAK DETECTION
-    if data.occupancy == 0 and data.water_flow > 2.0:
-        prob = calculate_confidence(data.water_flow, 2.0)
-        wasted_liters = data.water_flow * 60
-        # Cost: Liters/1000 * 0.5kWh/m3 * Peak Rate (10.20)
+    # --- DYNAMIC WATER LEAK DETECTION ---
+    if data.water_flow > water_threshold:
+        deviation = data.water_flow - predicted_water_normal
+        prob = min(99.9, (deviation / water_threshold) * 100)
+
+        wasted_liters = (data.water_flow - predicted_water_normal) * 60
         est_cost = (wasted_liters / 1000) * 0.5 * 10.20
 
         alert = {
             "id": len(alerts_log) + 1,
             "time": data.timestamp,
-            "type": "CRITICAL_LEAK",
-            "message": f"Leak Detected! Flow: {data.water_flow}L/m.",
+            "type": "AI_ANOMALY_WATER",
+            "message": f"Abnormal Water Flow! Expected {predicted_water_normal}L, Got {data.water_flow}L.",
             "probable_wastage": f"{int(wasted_liters)} Liters",
             "estimated_savings": f"₹{round(est_cost, 2)}",
-            "probability_score": f"{prob}%",
-            "action": "AUTO_CUTOFF (Solenoid Valve)",
+            "probability_score": f"{round(prob, 1)}%",
+            "action": "AUTO_CUTOFF",
             "status": "RESOLVED"
         }
         alerts_log.append(alert)
 
-    # 2. ENERGY WASTE DETECTION
-    elif data.occupancy == 0 and data.energy_load > 0.5:
-        prob = calculate_confidence(data.energy_load, 0.5)
-        wasted_kwh = data.energy_load * 1.0
-        est_cost = wasted_kwh * 10.20  # Peak Rate
+    # --- DYNAMIC ENERGY WASTE DETECTION ---
+    elif data.energy_load > energy_threshold:
 
-        alert = {
-            "id": len(alerts_log) + 1,
-            "time": data.timestamp,
-            "type": "ENERGY_WASTE",
-            "message": f"Energy Waste! Load: {data.energy_load} kW.",
-            "probable_wastage": f"{round(wasted_kwh, 2)} kWh",
-            "estimated_savings": f"₹{round(est_cost, 2)}",
-            "probability_score": f"{prob}%",
-            "action": "AUTO_CUTOFF (Smart Relay)",
-            "status": "RESOLVED"
-        }
-        alerts_log.append(alert)
+        # Calculate Deviation
+        deviation = data.energy_load - expected_energy_load
 
-    # Update Room Status
+        # If deviation is small (just noise), ignore. If large (AC left on), Alert.
+        if deviation > 0.5:
+            prob = min(99.9, (deviation / energy_threshold) * 100)
+
+            wasted_kwh = deviation * 1.0
+            est_cost = wasted_kwh * 10.20  # Peak Rate
+
+            alert = {
+                "id": len(alerts_log) + 1,
+                "time": data.timestamp,
+                "type": "AI_ANOMALY_ENERGY",
+                "message": f"Abnormal Energy Spike! Expected {round(expected_energy_load, 1)}kW, Got {data.energy_load}kW.",
+                "probable_wastage": f"{round(wasted_kwh, 2)} kWh",
+                "estimated_savings": f"₹{round(est_cost, 2)}",
+                "probability_score": f"{round(prob, 1)}%",
+                "action": "AUTO_CUTOFF",
+                "status": "RESOLVED"
+            }
+            alerts_log.append(alert)
+
     room_status_db[data.room_id] = {
         "status": "Active" if data.occupancy else "Eco-Mode",
         "last_update": data.timestamp,
         "latest_alert": alert
     }
 
-    return {"status": "success", "alert": alert}
-
+    return {
+        "status": "success",
+        "alert": alert,
+        "debug": {
+            "ai_water_normal": predicted_water_normal,
+            "calc_energy_normal": expected_energy_load
+        }
+    }
 
 @app.get("/api/pump/optimize")
 def calculate_pump_schedule():
@@ -184,9 +207,14 @@ def calculate_pump_schedule():
     Saves this decision to history.
     """
     current_time = datetime.now()
-    total_water_needed = 12500.0  # Liters
-    scheduled_time = "02:00 AM"
-    duration_hours = total_water_needed / 5000
+    # We multiply by 60 mins * 8 hours to simulate a full night's buffer fill.
+    predicted_flow_per_min = brain.predict_demand(hour=2, occupancy=0, light_lux=0)
+
+    # If the model predicts 0 (unlikely but possible), fallback to a safe base load
+    if predicted_flow_per_min <= 0:
+        predicted_flow_per_min = 20.0  # Safety fallback
+
+    total_water_needed = predicted_flow_per_min * 60 * 8 # Liters
 
     energy_needed_kwh = (total_water_needed / 1000) * 0.5
 
@@ -200,9 +228,9 @@ def calculate_pump_schedule():
     decision = {
         "date": current_time.strftime("%Y-%m-%d"),
         "timestamp": current_time,
-        "total_water_pumped": f"{total_water_needed} L",
-        "scheduled_time": scheduled_time,
-        "duration": f"{round(duration_hours, 1)} Hours",
+        "total_water_pumped": f"{int(total_water_needed)} L",
+        "scheduled_time": "02:00 AM",
+        "duration": f"{round(total_water_needed / 5000, 1)} Hours",
         "total_cost": f"₹{round(actual_cost, 2)}",
         "money_saved": f"₹{round(savings, 2)}",
         "grid_status": "Off-Peak (Optimized)"
@@ -254,6 +282,48 @@ def calculate_battery_schedule():
     battery_history_log.append(decision)
 
     return decision
+
+@app.get("/api/forecast/budget")
+def forecast_budget():
+    """
+    FUTURE FORECASTING: Simulates the next 30 days to predict the monthly bill.
+    Used for 'Budget vs Actual' analysis.
+    """
+    today = datetime.now()
+    total_predicted_water = 0
+    total_predicted_cost = 0
+
+    # Simulate next 30 days
+    for day in range(1, 31):
+        future_date = today + timedelta(days=day)
+        is_weekend = future_date.weekday() >= 5
+
+        # Assumption: Weekends are empty (0 occ), Weekdays are busy (50 occ)
+        sim_occupancy = 0 if is_weekend else 50
+        sim_light = 0 if is_weekend else 500
+
+        # Ask AI for daily demand (Summing 8 active hours for simplicity)
+        # We sample 10 AM as a representative "Peak Hour" for the model
+        hourly_flow = brain.predict_demand(hour=10, occupancy=sim_occupancy, light_lux=sim_light)
+
+        # Daily Water = Hourly Flow * 10 active hours
+        daily_water = hourly_flow * 60 * 10
+        total_predicted_water += daily_water
+
+        # Cost Math (Assumes mixed peak/off-peak usage)
+        # 50% Peak (₹10.20), 50% Off-Peak (₹6.80) -> Avg ₹8.50
+        daily_kwh = (daily_water / 1000) * 0.5
+        daily_cost = daily_kwh * 8.50
+
+        total_predicted_cost += daily_cost
+
+    return {
+        "forecast_period": "Next 30 Days",
+        "projected_water_usage": f"{int(total_predicted_water):,} Liters",
+        "projected_bill": f"₹{int(total_predicted_cost):,}",
+        "status": "Under Budget" if total_predicted_cost < 5000 else "Over Budget",
+        "recommendation": "Maintain current schedule" if total_predicted_cost < 5000 else "Reduce peak pumping"
+    }
 
 # --- HISTORY ENDPOINTS ---
 @app.get("/api/history/alerts")
