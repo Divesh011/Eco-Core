@@ -15,7 +15,7 @@ class EcoBrain:
         data = pd.read_csv(csv_path)
 
         # Preparing the data
-        X = data[['hour', 'occupancy', 'light lux']]
+        X = data[['hour', 'occupancy', 'light_lux']]
         y = data['water_flow']
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
