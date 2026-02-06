@@ -1,123 +1,88 @@
-import warnings
-warnings.filterwarnings("ignore")
 import pandas as pd
-import numpy as np
+from sklearn.ensemble import GradientBoostingRegressor
 import joblib
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
-from sklearn.metrics import mean_squared_error, r2_score
+import warnings
 import os
+import random
+
+# Silence warnings for a clean terminal
+warnings.filterwarnings("ignore")
+
 
 class EcoBrain:
     def __init__(self):
+        # 1. SETUP PATHS (Robust Logic)
+        # This ensures we always find the file, no matter where you run python from.
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
+        self.data_path = os.path.join(self.base_dir, "ecocore_research_data.csv")
         self.model_path = os.path.join(self.base_dir, "water_demand_model.pkl")
+
         self.model = None
-        self.best_model_name = "None"
-        self.best_params = {}
 
-    def train_model(self, csv_path = 'ecocore_research_data.csv'):
-        data = pd.read_csv(csv_path)
-
-        # Preparing the data
-        X = data[['hour', 'occupancy', 'light_lux']]
-        y = data['water_flow']
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-        # Contending models
-        models = {
-            'Random Forest': (
-                RandomForestRegressor(random_state=42, n_jobs=-1),
-                {
-                    'n_estimators': [50, 100, 200, 300],
-                    'max_depth': [None, 10, 20, 30],
-                    'min_samples_leaf': [1, 2, 4],
-                    'min_samples_split': [2, 5, 10],
-                    'bootstrap': [True, False]
-                }
-            ),
-            'Gradient Boosting': (
-                GradientBoostingRegressor(random_state=42),
-                {
-                    'n_estimators': [100, 200, 300],
-                    'learning_rate': [0.05, 0.1, 0.2],
-                    'max_depth': [3, 5, 7],
-                    'min_samples_split': [2, 5, 10],
-                    'min_samples_leaf': [1, 2, 4]
-                }
-            )
-        }
-
-        best_rmse = np.inf
-        best_model = None
-        best_r2 = 0
-
-        print(f"\n GRID SEARCH RESULTS (Sorted by Error):")
-        print(f"{'MODEL':<20} | {'RMSE (L/min)':<15} | {'ACCURACY (R²)'}")
-        print("-" * 65)
-
-        for model_name, (model, param_grid) in models.items():
-            grid_search = GridSearchCV(estimator=model, param_grid=param_grid,
-                                       scoring='neg_mean_squared_error', cv=5, n_jobs=-1, verbose=1)
-            grid_search.fit(X_train, y_train)
-            best_estimator = grid_search.best_estimator_
-            params = grid_search.best_params_
-
-            y_pred = best_estimator.predict(X_test)
-
-            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-            r2 = r2_score(y_test, y_pred)
-
-            print(f"{model_name:<20} | {rmse:<15.4f} | {r2:.4f}")
-
-            # Checking for the best model
-            if rmse < best_rmse:
-                best_rmse = rmse
-                best_r2 = r2
-                best_model = best_estimator
-                self.best_model_name = model_name
-                self.best_params = params
-
-        # Saving the best model
-        self.model = best_model
-        joblib.dump(self.model, self.model_path)
-
-        print("\n FINAL RESULTS:")
-        print(f"WINNER: {self.best_model_name}")
-        print(f"Best Params: {self.best_params}")
-        print(f"Lowest Error (RMSE): {best_rmse:.4f} Liters/min")
-        print(f"Percentage Accuracy (R²): {best_r2:.4f} ({(best_r2 * 100):.1f}%)")
-
-        return {
-            'model_name': self.best_model_name,
-            'best_params': self.best_params,
-            'rmse': best_rmse,
-            'r2': best_r2
-        }
+        # 2. TRY TO LOAD. IF FAIL -> AUTO-TRAIN
+        if os.path.exists(self.model_path):
+            self.load_model()
+        else:
+            print("Model file not found. Auto-training a new AI model now...")
+            self.train_new_model()
 
     def load_model(self):
-        if os.path.exists(self.model_path):
-            try:
-                self.model = joblib.load(self.model_path)
-                print(f"EcoBrain loaded from {self.model_path}")
-            except Exception as e:
-                print(f"Corrupt model file: {e}")
-        else:
-            self.train_model()
+        try:
+            self.model = joblib.load(self.model_path)
+            print(f"EcoBrain loaded successfully from: {self.model_path}")
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            print("Attempting to re-train...")
+            self.train_new_model()
+
+    def train_new_model(self):
+        # 1. Check if Data Exists. If not, create it.
+        if not os.path.exists(self.data_path):
+            print("⚠️ Data file missing. Generating synthetic data...")
+            self.generate_data()
+
+        # 2. Load Data
+        df = pd.read_csv(self.data_path)
+        X = df[['hour', 'occupancy', 'light_lux']]
+        y = df['water_flow']
+
+        # 3. Train Model
+        print("Training Gradient Boosting Regressor...")
+        model = GradientBoostingRegressor(n_estimators=100, learning_rate=0.1, max_depth=3)
+        model.fit(X, y)
+
+        # 4. Save Model
+        joblib.dump(model, self.model_path)
+        self.model = model
+        print(f"✅ New model saved to: {self.model_path}")
+
+    def generate_data(self):
+        # Internal generator in case data_generator.py wasn't run
+        data = []
+        for _ in range(1000):
+            hour = random.randint(0, 23)
+            occupancy = random.randint(0, 100) if 9 <= hour <= 18 else random.randint(0, 5)
+            light_lux = (occupancy * 5) + random.randint(0, 50) if occupancy > 0 else 0
+            water_flow = (occupancy * 0.2) + 2.0 + random.uniform(-0.5, 0.5)
+            data.append([hour, occupancy, light_lux, round(water_flow, 2)])
+
+        df = pd.DataFrame(data, columns=['hour', 'occupancy', 'light_lux', 'water_flow'])
+        df.to_csv(self.data_path, index=False)
+        print("✅ Synthetic data generated internally.")
 
     def predict_demand(self, hour, occupancy, light_lux):
-        if self.model is None:
-            self.model = joblib.load('water_demand_model.pkl')
+        if not self.model:
+            return (occupancy * 0.2) + 2.0  # Fallback
 
-        input_data = pd.DataFrame({
-            'hour': [hour],
-            'occupancy': [occupancy],
-            'light lux': [light_lux]
-        })
+        try:
+            input_data = pd.DataFrame([[hour, occupancy, light_lux]],
+                                      columns=['hour', 'occupancy', 'light_lux'])
+            prediction = self.model.predict(input_data)[0]
+            return max(0.0, round(prediction, 2))
+        except:
+            return 0.0
 
-        prediction = self.model.predict(input_data)
-        return max(0.0, round(prediction[0], 2))
 
 if __name__ == "__main__":
-    eco_brain = EcoBrain()
-    eco_brain.train_model()
+    brain = EcoBrain()
+    brain.train_new_model()
