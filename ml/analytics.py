@@ -11,7 +11,7 @@ class EcoBrain:
         self.best_model_name = "None"
         self.best_params = {}
 
-    def train_model(self, csv_path = 'encore_research_data.csv'):
+    def train_model(self, csv_path = 'ecocore_research_data.csv'):
         data = pd.read_csv(csv_path)
 
         # Preparing the data
