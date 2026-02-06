@@ -29,10 +29,7 @@ battery_history_log = []  # Stores Battery Charging History
 room_status_db = {}  # Real-time Room Status
 
 def seed_demo_data():
-    """
-    Generates 31 days of history.
-    Includes 'Weekend' logic so the data looks real (dips on Sat/Sun).
-    """
+    """ Generates 31 days of history. """
     now = datetime.now()
     alerts_log.clear()
     pump_history_log.clear()
@@ -42,8 +39,6 @@ def seed_demo_data():
         # Go back 'i' days
         past_date = now - timedelta(days=30-i) # Start 30 days ago, end today
         date_str = past_date.strftime("%Y-%m-%d")
-
-        # WEEKEND LOGIC: If Sat(5) or Sun(6), usage is low
         is_weekend = past_date.weekday() >= 5
 
         # --- 1. Water Pump Data ---
