@@ -2,9 +2,63 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EcoCore Dashboard</title>
-    <link rel="stylesheet" href="/static/style.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+
+    <style>
+        /* --- NEW MODAL STYLES (Popup Logic) --- */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5); /* Black w/ opacity */
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border-radius: 15px;
+            width: 90%;
+            max-width: 1000px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {transform: translateY(-50px); opacity: 0;}
+            to {transform: translateY(0); opacity: 1;}
+        }
+
+        .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .close-btn:hover { color: #000; }
+
+        /* --- CLICKABLE CARDS --- */
+        .summary-card {
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .summary-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+        }
+    </style>
 </head>
 <body>
 
@@ -20,197 +74,231 @@
     </header>
 
     <div class="metrics-grid">
-
-        <div class="card">
-            <h2><i class="fas fa-water"></i> Water Pumping History</h2>
-            <div style="overflow-x: auto;">
-                <table id="water-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Volume</th>
-                            <th>Cost (Off-Peak)</th>
-                            <th>Savings</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
+        <div class="card summary-card" onclick="openModal('waterModal')">
+            <h2><i class="fas fa-water"></i> Water System</h2>
+            <h1 id="water-total-savings">₹0.00</h1>
+            <p>Saved this week</p>
+            <small style="color: var(--accent-teal)">Click for Graph & History &rarr;</small>
         </div>
 
-        <div class="card">
-            <h2><i class="fas fa-battery-half"></i> Battery Charging History</h2>
-            <div style="overflow-x: auto;">
-                <table id="battery-table">
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <th>Energy Added</th>
-                            <th>Cost (Off-Peak)</th>
-                            <th>Savings</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
+        <div class="card summary-card" onclick="openModal('batteryModal')">
+            <h2><i class="fas fa-bolt"></i> Battery System</h2>
+            <h1 id="battery-total-savings">₹0.00</h1>
+            <p>Saved this week</p>
+            <small style="color: var(--accent-teal)">Click for Graph & History &rarr;</small>
+        </div>
+
+        <div class="card summary-card" onclick="openModal('alertsModal')">
+            <h2><i class="fas fa-bell"></i> Active Monitoring</h2>
+            <h1 id="alert-count">0</h1>
+            <p>Events Detected</p>
+            <small style="color: var(--accent-teal)">Click for Audit Log &rarr;</small>
         </div>
     </div>
+</div>
 
-    <div class="card">
-        <h2><i class="fas fa-history"></i> Impact History (Wastage Prevented)</h2>
-        <table id="alerts-table">
-            <thead>
-                <tr>
-                    <th>Time</th>
-                    <th>Event Type</th>
-                    <th>Probable Wastage (1 Hr)</th>
-                    <th>Estimated Savings</th>
-                    <th>Confidence</th>
-                    <th>Action Taken</th>
-                </tr>
-            </thead>
+<div id="waterModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal('waterModal')">&times;</span>
+        <h2>💧 Water Pumping Analysis</h2>
+        <div style="height: 300px; margin-bottom: 20px;">
+            <canvas id="waterChart"></canvas>
+        </div>
+        <h3>History Log</h3>
+        <table id="water-table">
+            <thead><tr><th>Date</th><th>Volume</th><th>Actual Cost</th><th>Savings</th></tr></thead>
             <tbody></tbody>
         </table>
     </div>
+</div>
 
+<div id="batteryModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal('batteryModal')">&times;</span>
+        <h2>⚡ Battery Arbitrage Analysis</h2>
+        <div style="height: 300px; margin-bottom: 20px;">
+            <canvas id="batteryChart"></canvas>
+        </div>
+        <h3>History Log</h3>
+        <table id="battery-table">
+            <thead><tr><th>Date</th><th>Energy Added</th><th>Actual Cost</th><th>Savings</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<div id="alertsModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="closeModal('alertsModal')">&times;</span>
+        <h2>🔔 System Alerts & Impact</h2>
+        <table id="alerts-table">
+            <thead><tr><th>Time</th><th>Type</th><th>Impact</th><th>Savings</th><th>Confidence</th><th>Status</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </div>
 </div>
 
 <script>
-    // Point to your FastAPI URL (Empty string works if hosted on same server)
-    const API_BASE = "";
+    const API_BASE = ""; // Relative path works automatically
 
-    async function loadDashboard() {
+    // Global Storage for Data
+    let waterData = [];
+    let batteryData = [];
+    let alertData = [];
+
+    // --- 1. DATA FETCHING ---
+    async function refreshData() {
         try {
-            // 1. Fetch Alerts & Impact
-            const alertRes = await fetch(`${API_BASE}/api/history/alerts`);
-            const alerts = await alertRes.json();
-            renderTable('alerts-table', alerts, (item) => `
-                <tr class="alert-row ${item.type}">
-                    <td>${new Date(item.time).toLocaleTimeString()}</td>
-                    <td>
-                        <span style="font-weight:600">${item.type.replace('_', ' ')}</span><br>
-                        <span style="font-size:0.8em; color:#666;">${item.message}</span>
-                    </td>
-                    <td style="color:#d32f2f;">${item.probable_wastage || '-'}</td>
-                    <td style="color:#2e7d32; font-weight:bold;">${item.estimated_savings || '-'}</td>
-                    <td>
-                        <div style="background:#eee; border-radius:4px; width:100%; height:6px;">
-                            <div style="background:#2e7d32; width:${item.probability_score.replace('%','') || 0}%; height:100%; border-radius:4px;"></div>
-                        </div>
-                        <span style="font-size:0.8em">${item.probability_score}</span>
-                    </td>
-                    <td><span class="status-badge" style="font-size:0.8em;">${item.action}</span></td>
-                </tr>
-            `);
+            console.log("Fetching data...");
 
-            // 2. Fetch Water History
+            // Fetch Water
             const pumpRes = await fetch(`${API_BASE}/api/history/pumping`);
-            const pumps = await pumpRes.json();
+            waterData = await pumpRes.json();
 
-            // Sort by date (Oldest to Newest) for the graph
-            const sortedPumps = pumps.slice().sort((a,b) => new Date(a.date) - new Date(b.date));
-
-            renderTable('water-table', pumps, (item) => `
-                <tr>
-                    <td>${item.date}</td>
-                    <td>${item.total_water_pumped}</td>
-                    <td>₹${item.total_cost}</td>
-                    <td style="color: green; font-weight:bold;">${item.money_saved}</td>
-                </tr>
-            `);
-
-            // Draw Water Chart
-            drawChart(
-                'waterChart',
-                sortedPumps.map(i => i.date),
-                sortedPumps.map(i => i.peak_cost_comparison),
-                sortedPumps.map(i => i.total_cost),
-                'Potential Cost (Peak)', 'Optimized Cost (Off-Peak)'
-            );
-
-            // 3. Fetch Battery History
+            // Fetch Battery
             const battRes = await fetch(`${API_BASE}/api/history/battery`);
-            const batts = await battRes.json();
-            const sortedBatts = batts.slice().sort((a,b) => new Date(a.date) - new Date(b.date));
+            batteryData = await battRes.json();
 
-            renderTable('battery-table', batts, (item) => `
-                <tr>
-                    <td>${item.date}</td>
-                    <td>${item.energy_added}</td>
-                    <td>₹${item.total_cost}</td>
-                    <td style="color: green; font-weight:bold;">${item.money_saved}</td>
-                </tr>
-            `);
+            // Fetch Alerts
+            const alertRes = await fetch(`${API_BASE}/api/history/alerts`);
+            alertData = await alertRes.json();
 
-            // Draw Battery Chart
-            drawChart(
-                'batteryChart',
-                sortedBatts.map(i => i.date),
-                sortedBatts.map(i => i.peak_cost_comparison),
-                sortedBatts.map(i => i.total_cost),
-                'Standard Cost', 'EcoCore Cost'
-            );
+            // UPDATE UI
+            updateSummaryCards();
+            renderTables();
+
+            // Note: Graphs are drawn only when the modal opens to fix sizing bugs
 
         } catch (error) {
-            console.error("Error loading dashboard:", error);
+            console.error("Error fetching data:", error);
         }
     }
 
-    function renderTable(tableId, data, rowBuilder) {
-        document.querySelector(`#${tableId} tbody`).innerHTML = data.map(rowBuilder).join('');
+    // --- 2. UPDATE SUMMARY CARDS ---
+    function updateSummaryCards() {
+        // Calculate Total Water Savings (Parsing string "₹21.25" -> Float)
+        let waterSavings = waterData.reduce((acc, item) => {
+            let val = parseFloat(item.money_saved.replace(/[₹,]/g, '')) || 0;
+            return acc + val;
+        }, 0);
+        document.getElementById('water-total-savings').innerText = "₹" + waterSavings.toFixed(2);
+
+        // Calculate Total Battery Savings
+        let battSavings = batteryData.reduce((acc, item) => {
+            let val = parseFloat(item.money_saved.replace(/[₹,]/g, '')) || 0;
+            return acc + val;
+        }, 0);
+        document.getElementById('battery-total-savings').innerText = "₹" + battSavings.toFixed(2);
+
+        // Alert Count
+        document.getElementById('alert-count').innerText = alertData.length;
     }
 
-    // --- CHART.JS BUILDER ---
-    function drawChart(canvasId, labels, dataHigh, dataLow, labelHigh, labelLow) {
-        function drawChart(canvasId, labels, dataHigh, dataLow, labelHigh, labelLow) {
-        const ctx = document.getElementById(canvasId).getContext('2d');
+    // --- 3. RENDER TABLES ---
+    function renderTables() {
+        // Water Table
+        const waterRows = waterData.map(item => `
+            <tr>
+                <td>${item.date}</td>
+                <td>${item.total_water_pumped}</td>
+                <td>₹${item.total_cost}</td>
+                <td style="color:green; font-weight:bold">${item.money_saved}</td>
+            </tr>
+        `).join('');
+        document.querySelector('#water-table tbody').innerHTML = waterRows;
 
-        // CHECK: Does the chart already exist?
-        if (window[canvasId] instanceof Chart) {
-            // YES: Just update the data points (Smooth Animation)
-            window[canvasId].data.labels = labels;
-            window[canvasId].data.datasets[0].data = dataHigh;
-            window[canvasId].data.datasets[1].data = dataLow;
-            window[canvasId].update('none'); // 'none' mode prevents full re-animation
-        } else {
-            // NO: Create it from scratch (First Load)
-            window[canvasId] = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: labelHigh, // Red Line
-                            data: dataHigh,
-                            borderColor: '#ff5252',
-                            backgroundColor: 'rgba(255, 82, 82, 0.1)',
-                            fill: true,
-                            tension: 0.4
-                        },
-                        {
-                            label: labelLow, // Green Line
-                            data: dataLow,
-                            borderColor: '#4caf50',
-                            backgroundColor: 'rgba(76, 175, 80, 0.2)',
-                            fill: true,
-                            tension: 0.4
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    animation: false, // Disable bounce animation on updates
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: { legend: { position: 'top' } },
-                    scales: { y: { beginAtZero: true } }
-                }
-            });
+        // Battery Table
+        const battRows = batteryData.map(item => `
+            <tr>
+                <td>${item.date}</td>
+                <td>${item.energy_added}</td>
+                <td>₹${item.total_cost}</td>
+                <td style="color:green; font-weight:bold">${item.money_saved}</td>
+            </tr>
+        `).join('');
+        document.querySelector('#battery-table tbody').innerHTML = battRows;
+
+        // Alerts Table
+        const alertRows = alertData.map(item => `
+            <tr class="alert-row ${item.type}">
+                <td>${new Date(item.time).toLocaleTimeString()}</td>
+                <td><b>${item.type}</b><br><small>${item.message}</small></td>
+                <td style="color:#d32f2f;">${item.probable_wastage || '-'}</td>
+                <td style="color:green; font-weight:bold;">${item.estimated_savings || '-'}</td>
+                <td>${item.probability_score}</td>
+                <td><span class="status-badge">${item.action}</span></td>
+            </tr>
+        `).join('');
+        document.querySelector('#alerts-table tbody').innerHTML = alertRows;
+    }
+
+    // --- 4. MODAL LOGIC & GRAPH DRAWING ---
+    function openModal(modalId) {
+        document.getElementById(modalId).style.display = "block";
+
+        // Draw charts ONLY when modal opens (fixes squished chart bug)
+        if (modalId === 'waterModal') drawWaterChart();
+        if (modalId === 'batteryModal') drawBatteryChart();
+    }
+
+    function closeModal(modalId) {
+        document.getElementById(modalId).style.display = "none";
+    }
+
+    // Close modal if clicking outside box
+    window.onclick = function(event) {
+        if (event.target.classList.contains('modal')) {
+            event.target.style.display = "none";
         }
     }
 
-    loadDashboard();
-    setInterval(loadDashboard, 3000); // Live update every 3 seconds
+    // --- 5. CHART BUILDERS ---
+    let waterChartInstance = null;
+    let batteryChartInstance = null;
+
+    function drawWaterChart() {
+        const ctx = document.getElementById('waterChart').getContext('2d');
+        if (waterChartInstance) waterChartInstance.destroy(); // Prevent duplicates
+
+        // Sort by date
+        const sorted = waterData.slice().sort((a,b) => new Date(a.date) - new Date(b.date));
+
+        waterChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: sorted.map(i => i.date),
+                datasets: [
+                    { label: 'Peak Cost (Avoided)', data: sorted.map(i => i.peak_cost_comparison), borderColor: '#ff5252', fill: false },
+                    { label: 'Optimized Cost (Paid)', data: sorted.map(i => i.total_cost), borderColor: '#4caf50', backgroundColor: 'rgba(76, 175, 80, 0.2)', fill: true }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+
+    function drawBatteryChart() {
+        const ctx = document.getElementById('batteryChart').getContext('2d');
+        if (batteryChartInstance) batteryChartInstance.destroy();
+
+        const sorted = batteryData.slice().sort((a,b) => new Date(a.date) - new Date(b.date));
+
+        batteryChartInstance = new Chart(ctx, {
+            type: 'bar', // Using Bar chart for variety
+            data: {
+                labels: sorted.map(i => i.date),
+                datasets: [
+                    { label: 'Savings Generated', data: sorted.map(i => parseFloat(i.money_saved.replace(/[₹,]/g, ''))), backgroundColor: '#4caf50' }
+                ]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+
+    // INITIAL LOAD
+    refreshData();
+    // Auto-refresh every 5 seconds
+    setInterval(refreshData, 5000);
+
 </script>
-
 </body>
 </html>
