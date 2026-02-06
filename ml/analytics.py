@@ -6,9 +6,12 @@ import joblib
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
+import os
 
 class EcoBrain:
     def __init__(self):
+        self.base_dir = os.path.dirname(os.path.abspath(__file__))
+        self.model_path = os.path.join(self.base_dir, "water_demand_model.pkl")
         self.model = None
         self.best_model_name = "None"
         self.best_params = {}
@@ -77,7 +80,7 @@ class EcoBrain:
 
         # Saving the best model
         self.model = best_model
-        joblib.dump(self.model, 'water_demand_model.pkl')
+        joblib.dump(self.model, self.model_path)
 
         print("\n FINAL RESULTS:")
         print(f"WINNER: {self.best_model_name}")
@@ -91,6 +94,16 @@ class EcoBrain:
             'rmse': best_rmse,
             'r2': best_r2
         }
+
+    def load_model(self):
+        if os.path.exists(self.model_path):
+            try:
+                self.model = joblib.load(self.model_path)
+                print(f"EcoBrain loaded from {self.model_path}")
+            except Exception as e:
+                print(f"Corrupt model file: {e}")
+        else:
+            self.train_model()
 
     def predict_demand(self, hour, occupancy, light_lux):
         if self.model is None:

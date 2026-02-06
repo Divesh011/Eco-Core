@@ -38,8 +38,6 @@ def seed_demo_data():
     pump_history_log.clear()
     battery_history_log.clear()
 
-    print("🌱 Seeding 31 Days of History...")
-
     for i in range(31):
         # Go back 'i' days
         past_date = now - timedelta(days=30-i) # Start 30 days ago, end today
